@@ -25,6 +25,16 @@ import time
 
 import lib
 
+
+def command(server: lib.Proto, command: str, check: bool = False):
+    logging.info(f"Sending command to the server: {command!r}")
+    response = server.command(command)
+    logging.info(f"Got response: {response!r}")
+    if check and response != "OK":
+        logging.fatal("Got an unexpecting response from the server")
+        exit(1)
+
+
 lib.init("client")
 
 parser = argparse.ArgumentParser(description="PTD client")
@@ -109,8 +119,7 @@ os.mkdir(args.output)
 logging.info(f"Running {args.ntp_command!r}")
 subprocess.run(args.ntp_command, shell=True, check=True)
 
-if serv.command("init") != "OK":
-    exit(1)
+command(serv, "init", check=True)
 
 client_time1 = time.time()
 serv_time = float(serv.command("time"))
@@ -132,17 +141,16 @@ for mode in ["ranging", "testing"]:
     logging.info("Running runBefore")
     subprocess.run(args.run_before, shell=True, check=True, env=env)
 
-    if serv.command(f"start-{mode},workload") != "OK":
-        exit(1)
+    command(serv, f"start-{mode},workload", check=True)
 
     logging.info("Running runWorkload")
     subprocess.run(args.run_workload, shell=True, check=True, env=env)
 
-    if serv.command("stop") != "OK":
-        exit(1)
+    command(serv, "stop", check=True)
 
     log = serv.command("get-last-log")
     if log is None or not log.startswith("base64 "):
+        logging.fatal("Could not get log from the server")
         exit(1)
     with open(out + "/spl.txt", "wb") as f:
         f.write(base64.b64decode(log[len("base64 ") :]))
@@ -154,6 +162,7 @@ logging.info("Done runs")
 
 log = serv.command("get-log")
 if log is None or not log.startswith("base64 "):
+    logging.fatal("Could not get log from the server")
     exit(1)
 
 with open(args.output + "/spl-full.txt", "wb") as f:
